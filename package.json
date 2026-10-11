@@ -1,0 +1,38 @@
+{
+  "name": "dsh-visual-canvas",
+  "version": "0.1.0",
+  "description": "DSH 可视化前端编辑插件：在浏览器里点选/拖拽/缩放/改样式，直接改写项目源码；DSH Agent 通过工具与画布协作。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./overlay": {
+      "default": "./lib/overlay/overlay.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.0-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "visual-editor",
+    "canvas",
+    "frontend"
+  ],
+  "license": "MIT"
+}

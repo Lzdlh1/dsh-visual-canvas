@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画布 · dsh-visual-canvas</title>
+<link rel="stylesheet" href="__PREFIX__/__canvas__/shell.css">
+</head>
+<body>
+<div id="app">
+	<header class="bar">
+		<!--
+		  侧边栏开关。**放在工具栏最左边**，而不是侧栏自己身上 ——
+		  侧栏收起后自身就看不见了，把开关放里面等于"收起来就再也打不开"。
+		  箭头方向跟着状态变（◀ 收起 / ▶ 展开）。
+		-->
+		<button type="button" id="btnSide" class="icon" data-tip="收起侧边栏" aria-label="侧边栏" aria-pressed="false"><span class="glyph">◀</span></button>
+		<span class="brand">画布</span>
+		<span class="file" id="fileLabel" title="布局文件（进版本库，团队共享）"></span>
+		<div class="spacer"></div>
+		<button type="button" id="btnAdd" class="primary" data-tip="新建一块画板">＋ 添加画板</button>
+		<!--
+		  工具栏改成图标按钮 + 悬停出文字（借 OpenDesign 的做法）。
+		  文字仍在：① 放进 data-tip 悬停显示 ② aria-label 供读屏。
+		  这样工具栏安静下来，但可发现性没有丢——**丢可发现性的图标按钮是坏设计**。
+		-->
+		<button type="button" id="btnUndo" class="icon" data-tip="撤销（Ctrl+Z）" aria-label="撤销"><span class="glyph">↶</span></button>
+		<button type="button" id="btnRedo" class="icon" data-tip="重做（Ctrl+Shift+Z）" aria-label="重做"><span class="glyph">↷</span></button>
+		<button type="button" id="btnPick" class="icon" data-tip="选择元素：开启后点画板里的元素即可改样式（也可按住 Alt 点）" aria-label="选择元素"><span class="glyph">◫</span></button>
+		<button type="button" id="btnShape" class="icon" data-tip="创建组件：选一个图形，在画板上按住拖出来" aria-label="创建组件"><span class="glyph">▢</span></button>
+		<!--
+		  注释：选中一个组件 → 写评论 / 传图 → 发给 Agent。
+
+		  学 OpenDesign 的做法。它**不是"另一个聊天框"**，而是贴着元素的一张卡片 ——
+		  上面是"这是哪个元素、长什么样"（选择器 + 尺寸 + 颜色 + 字体），
+		  下面是你要说的话。这样用户不用打字描述"就是那个蓝色的小标签"，
+		  Agent 也不用猜。
+
+		  带 `data-tip` 和 `aria-label` 是工具栏的既有约定：
+		  图标可以安静，但**不能丢掉可发现性**。
+		-->
+		<button type="button" id="btnComment" class="icon" data-tip="注释：选中一个组件，写评论或传图发给 Agent" aria-label="注释"><span class="glyph">💬</span></button>
+		<button type="button" id="btnFit" class="icon" data-tip="适应：把所有画板缩放到可见范围（快捷键 0）" aria-label="适应"><span class="glyph">⛶</span></button>
+		<button type="button" id="btnReload" class="icon" data-tip="重载：从磁盘重新读取布局" aria-label="重载"><span class="glyph">↻</span></button>
+		<span class="theme-group" id="themeGroup" data-tip="主题（存本机，不进项目文件）">
+			<button type="button" data-theme="light">亮</button>
+			<button type="button" data-theme="dark">暗</button>
+			<button type="button" data-theme="blue">蓝</button>
+		</span>
+		<span class="zoom-group">
+			<button type="button" id="zoomOut" class="zoom-btn" data-tip="缩小" aria-label="缩小">−</button>
+			<span class="zoom" id="zoomLabel" title="点一下回到 100%，再点一次适应全部">100%</span>
+			<button type="button" id="zoomIn" class="zoom-btn" data-tip="放大" aria-label="放大">＋</button>
+		</span>
+	</header>
+
+	<div class="warnings" id="warnings" hidden></div>
+
+	<div class="body">
+		<aside class="side">
+			<div class="side-tabs" id="sideTabs">
+				<button type="button" data-pane="boards" aria-pressed="true">画板</button>
+				<button type="button" data-pane="layers" aria-pressed="false">图层</button>
+				<button type="button" data-pane="library" aria-pressed="false">库</button>
+				<button type="button" data-pane="shape" aria-pressed="false">形状</button>
+			</div>
+
+			<div class="side-pane" id="paneBoards">
+				<div class="side-head">
+					<input type="search" id="search" placeholder="搜索画板、路径、规格…" autocomplete="off">
+				</div>
+				<div class="side-list" id="boardList"></div>
+				<div class="side-foot" id="sideFoot"></div>
+			</div>
+
+			<div class="side-pane" id="paneLayers" hidden>
+				<div class="side-head">
+					<input type="search" id="layerSearch" placeholder="搜索图层（名称、文本、class…）" autocomplete="off">
+				</div>
+				<!-- 新建入口：此前工具只能「改」，这里补上「建」 -->
+				<div class="layer-bar">
+					<button type="button" id="btnLayerNew" title="在选中的图层里新建一个元素">＋ 新建</button>
+					<span class="grow"></span>
+					<button type="button" id="btnLayerCollapse" title="全部折叠">⇱ 折叠</button>
+				</div>
+				<div class="layer-new" id="layerNew" hidden></div>
+				<div class="side-list layer-tree" id="layerTree"></div>
+				<div class="side-foot" id="layerFoot"></div>
+			</div>
+
+			<div class="side-pane" id="paneLibrary" hidden>
+				<div class="library-bar">
+					<button type="button" id="btnLibraryImport" title="导入 Google Copy 格式的设计包（可一次选多个 zip）">＋ 导入设计包</button>
+					<!--
+					  `multiple`：允许一次选多个设计包。
+					  选一个也照常工作 —— 多选是能力，不是新流程。
+					-->
+					<input type="file" id="libraryFile" accept=".zip,application/zip" multiple hidden>
+				</div>
+				<!-- 面板内容由 library-panel.js 渲染 -->
+				<div class="library-panel" id="libraryPanel"></div>
+			</div>
+
+			<div class="side-pane" id="paneShape" hidden>
+				<!-- 形状参数由 shape-panel.js 渲染 -->
+				<div class="shape-panel" id="shapePanel"></div>
+			</div>
+		</aside>
+
+		<!-- 图层右键菜单：挂在 body 末尾，避免被侧栏的 overflow 裁掉 -->
+		<div class="layer-menu" id="layerMenu" hidden></div>
+
+		<div class="splitter" id="splitter" title="拖动改宽度，双击复位"></div>
+
+		<div class="viewport" id="viewport">
+			<!--
+			  元素检查器：选中即显示「这是什么、什么尺寸、什么颜色」。
+			  放在视口左上角，因为它回答的是"我刚点了什么"——
+			  和形状面板（「我要改什么」）是两件事，所以不共用侧栏页签。
+			  **刻意做成只读**：可编辑控件一多就变成第二个样式面板，
+			  两边都能改同一个元素、状态互相覆盖，比只读更难用。
+			-->
+			<div class="inspector" id="inspector"></div>
+
+			<!--
+			  图形选择条：借 CAD/Office 的做法——先选图形，再在画布上画。
+			  放在视口顶部居中，因为它只在绘制模式里出现，不该占常驻位置。
+			-->
+			<div class="shape-bar" id="shapeBar" hidden>
+				<div class="shape-row" id="shapeRow"></div>
+				<span class="shape-hint" id="shapeHint">在画板上按住拖动即可画出</span>
+			</div>
+			<div class="world" id="world"></div>
+			<div class="empty" id="empty">
+				<h2 class="empty-title">画布还是<span class="hl">空的</span></h2>
+				<p class="empty-sub">好的作品，从这里开始</p>
+				<p class="empty-hint">点右上角「添加画板」，输入你应用里的路径（例如 <code>/login</code>），<br>它就会作为一个实时预览的画板出现在这里。</p>
+				<p class="empty-hint dim">滚轮缩放 · 拖空白处平移 · 拖动标题移动画板 · 拖右下角改尺寸</p>
+			</div>
+		</div>
+	</div>
+
+	<!--
+	  指令栏改成 OpenDesign 那种「输入卡片 + 圆形发送」。
+	  结构变化：target / text / send 的 id 一个没动，只是换了外层容器和底部控件行——
+	  改结构时保住 id，shell.js 就不用跟着改。
+	-->
+	<footer class="prompt" id="promptBar">
+		<div class="composer">
+			<input type="text" id="promptText" placeholder="说要改什么…（例如：把主按钮改成圆角 12px）" autocomplete="off" disabled>
+			<div class="composer-row">
+				<span class="ctx-chip" id="promptTarget" title="这条指令会发给哪个会话">检查中…</span>
+				<span class="composer-hint">在画布上选中元素后，指令会带上它的位置</span>
+				<button type="button" id="promptSend" class="send" disabled data-tip="发送给 Agent" aria-label="发送给 Agent">
+					<span class="glyph">↑</span>
+				</button>
+			</div>
+		</div>
+	</footer>
+
+	<footer class="status" id="status"><span id="statusText">就绪</span></footer>
+</div>
+
+<!--
+  注释卡片。
+
+  结构照着 OpenDesign 的来（它就是"选中元素后浮出来的那张小卡片"）：
+
+    ① 顶部：元素选择器（`span.eyebrow` 这种）+ 「拖动」
+    ② 中间：这个元素长什么样（尺寸 / 文字色 / 底色 / 字体 / 行高）
+    ③ 下面：你要说的话
+    ④ 底部：附件（图片）、关闭、发送
+
+  ## 为什么要把②也画出来
+
+  因为那是**用户和 Agent 之间的共同语言**。用户说"这个太挤了"，
+  Agent 不知道"这个"是哪个、也不知道现在是多少像素。
+  把 `Size 183x34`、`Color oklch(...)` 直接摆在那里，
+  两边看到的是同一组数字 —— 对话才可能准确。
+
+  这些值**不进源码**，只进发给 Agent 的消息（见 shell.js 的 `buildCommentMessage`）。
+-->
+<div class="comment-card" id="commentCard" hidden role="dialog" aria-label="注释此元素">
+	<div class="cc-head">
+		<span class="cc-grip" title="按住拖动这张卡片">⠿</span>
+		<code class="cc-selector" id="ccSelector" title="元素的 HTML 选择器">—</code>
+		<button type="button" class="cc-more" id="ccCopyPath" data-tip="复制源码位置" aria-label="复制源码位置">源码 ›</button>
+	</div>
+
+	<!-- 元素长什么样：由 shell.js 从 computedStyle 填 -->
+	<dl class="cc-specs" id="ccSpecs"></dl>
+
+	<textarea class="cc-input" id="ccInput" rows="4" placeholder="评论此元素…（例如：这个标签和下面标题挨太近了，间距改成 16px）"></textarea>
+
+	<!-- 已选图片的缩略图（OpenDesign 里附件是显示出来的，不是只显示个数字） -->
+	<div class="cc-thumbs" id="ccThumbs" hidden></div>
+
+	<div class="cc-actions">
+		<label class="cc-attach" data-tip="附加图片（可以多张）">
+			<input type="file" id="ccFiles" accept="image/*" multiple hidden>
+			<span class="glyph">📎</span>
+		</label>
+		<button type="button" class="cc-icon" id="ccClose" data-tip="关闭（Esc）" aria-label="关闭"><span class="glyph">✕</span></button>
+		<span class="cc-target" id="ccTarget">检查中…</span>
+		<button type="button" class="cc-send" id="ccSend" disabled>发送给 Agent</button>
+	</div>
+</div>
+
+<dialog id="addDialog">
+	<form method="dialog" id="addForm">
+		<h2>添加画板</h2>
+		<label>
+			<span>应用路径</span>
+			<input type="text" id="addPath" placeholder="/login" autocomplete="off" required>
+			<small>你 dev server 里的路由，必须以 / 开头</small>
+		</label>
+		<label>
+			<span>名称</span>
+			<input type="text" id="addName" placeholder="留空则用路径" autocomplete="off">
+		</label>
+		<label>
+			<span>设备</span>
+			<select id="addDevice"></select>
+		</label>
+		<label>
+			<span>规格 / 备注</span>
+			<textarea id="addSpec" rows="3" placeholder="这块界面要解决什么？（会跟着布局一起提交，团队可见）"></textarea>
+		</label>
+		<menu>
+			<button type="button" id="addCancel">取消</button>
+			<button type="submit" class="primary" id="addConfirm">添加</button>
+		</menu>
+	</form>
+</dialog>
+
+<script>
+// 前缀必须由宿主注入：外壳页面**不是**被代理的页面，没有引导脚本替它设置这个全局量。
+// 少了这一步，外壳就会去请求 `/__canvas__/board`（缺 `/canvas` 前缀）而 404。
+globalThis.__DSH_CANVAS_PREFIX__ = "__PREFIX__";
+</script>
+<script type="module" src="__PREFIX__/__canvas__/shell.js"></script>
+</body>
+</html>

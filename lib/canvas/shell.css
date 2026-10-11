@@ -1,0 +1,2141 @@
+/*
+ * 画布外壳样式。
+ *
+ * 视觉上刻意贴近 DSH 自身的深色主题（用同一套中性色阶），
+ * 因为这个页面会和 DSH 的界面并排出现，风格不一致会显得很突兀。
+ *
+ * 布局要点：
+ * - `.viewport` 是固定的可视区，`.world` 在其内部做 translate+scale，
+ *   `transform-origin: 0 0` 让坐标换算保持简单（屏幕坐标 = 世界坐标 * zoom + pan）。
+ * - 画板本体（`.board`）在 `.world` 坐标系里用绝对定位，
+ *   所以缩放画布时画板跟着缩放，而画板里的 iframe 仍按设备真实尺寸渲染
+ *   ——这正是设计工具的做法（缩放只影响观看，不影响页面自身的响应式断点）。
+ */
+
+/*
+ * 主题令牌。
+ *
+ * ## 层次（从远到近，每一层都要看得出区别）
+ *
+ *   --bg-app      最远层：画布底噪，什么都不放的地方
+ *   --bg-panel    面板层：工具栏、侧栏、底栏
+ *   --bg-raised   抬升层：卡片、列表项悬停、浮层
+ *   --bg-sunken   内凹层：输入框内部、代码块
+ *   --bg-selected 选中项
+ *
+ * ## 分界线（这是「分不清区域」的根源）
+ *
+ * 分界线必须与它两侧的层**都有**对比，否则等于没有。
+ * 早先暗色主题里 panel 是 var(--bg-panel)、line 是 var(--line-soft)——只差一点点亮度，
+ * 于是整屏糊成一片黑，用户看不出哪儿是哪儿。
+ * 现在每个主题的分界线都朝「远离背景」的方向拉开。
+ */
+/*
+ * 令牌来源：Google Copy 设计包（colors_and_type.css）。
+ *
+ * 包里的语义令牌（background / foreground / card / muted / primary / border）
+ * 已经映射到外壳这套结构令牌（bg-app / bg-panel / ink / accent / line）上，
+ * 所以后续全部样式不用改——换的是值，不是名字。
+ *
+ * ⚠ **唯一一处刻意偏离规范**：`--line` 比包里的 `--border` 更深。
+ *
+ * 包里暗色的 `--border` 是 `#1d1d1c`、`--background` 是 `#161616`，差值只有 7——
+ * 而"暗色下分不清区域"是用户明确提过的反馈。规范里的边框值是为它自己的
+ * 页面结构定的，用在"画布 + 侧栏 + 面板"这种多区域同屏的布局上不够。
+ * 所以这里取一个同色系但更深的档位：**跟规范走配色，但保住区域可分**。
+ */
+:root,
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	/* 层次（取自 --background / --card / --popover） */
+	--bg-app: #101010;
+	--bg-panel: #161616;
+	--bg-raised: #1d1d1c;
+	--bg-sunken: #0d0d0d;
+	--bg-selected: #1f2a3d;
+	/* 分界：见上方说明，刻意比 --border 更深 */
+	--line: #333333;
+	--line-soft: #242424;
+	--line-strong: #4a4a4a;
+	/* 文字（--foreground / --secondary-foreground / --muted-foreground） */
+	--ink: #eff1f4;
+	--ink-dim: #b0b0b0;
+	--muted: #949494;
+	--ink-on-accent: #ffffff;
+	/* 强调（--primary 在暗色下是 #fc2c50，规范如此） */
+	--accent: #fc2c50;
+	--accent-hover: #e01e40;
+	--accent-soft: rgba(252, 44, 80, 0.16);
+	--ok: #4ade80;
+	--warn: #fbbc05;
+	--warn-bg: #2a2410;
+	--warn-line: #6b5423;
+	--err: #ef4444;
+	--err-bg: #3a1f1f;
+	/* 设备外框与遮罩 */
+	--bezel: #ffffff;
+	--scrim: rgba(0, 0, 0, 0.5);
+	--shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03);
+	/* 高亮块：暗色下降低亮度，亮绿在深底上会刺眼 */
+	--hl: #3f6b2e;
+	/* 字体与圆角：与包一致（DM Sans / JetBrains Mono 未安装时优雅退回） */
+	--font-sans: "DM Sans", ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+	--radius: 8px;
+	/* 圆角梯度：包里是 calc(radius ∓ 若干)，展开成实际值免得每次算 */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+	/*
+	 * 按钮专用令牌（值取自包，名字避开外壳的同名不同义项）。
+	 *
+	 * 包里 `--accent` 是浅蓝/深红**悬停底色**，而外壳的 `--accent` 是主色——
+	 * 同名不同义，直接套会串。所以这里显式起一组 `--btn-*`。
+	 */
+	--btn-line: var(--line);
+	--btn-secondary-bg: #383838;       /* 包 --secondary（暗） */
+	--btn-secondary-ink: #e5e5e5;      /* 包 --secondary-foreground（暗） */
+	--btn-hover-bg: #4a2026;           /* 包 --accent（暗，深红底） */
+	--btn-hover-ink: #fc2c50;          /* 包 --accent-foreground（暗） */
+	--btn-disabled-bg: #383838;        /* 包 --muted（暗） */
+	--btn-disabled-ink: #949494;       /* 包 --muted-foreground（暗） */
+	/*
+	 * 侧栏专用令牌。
+	 *
+	 * 包里 sidebar 有**独立调色板**（`--sidebar` / `--sidebar-accent` /
+	 * `--sidebar-border`），不是复用 `--background`。这不是多此一举：
+	 * 导航区用一档不同的底色，一眼就能分出"我在这块是导航还是内容"。
+	 * 我们现在的侧栏和面板同色，靠 1px 线分开——规范的做法更省事也更清楚。
+	 */
+	--side-bg: #171717;                /* 包 --sidebar（暗） */
+	--side-ink: #e5e5e5;               /* 包 --sidebar-foreground（暗） */
+	--side-line: #2a2a2a;              /* 包 --sidebar-border（暗）加深一档：见 --line 的说明 */
+	--side-active-bg: #00266b;         /* 包 --sidebar-accent（暗，深蓝） */
+	--side-active-ink: #bfdbfe;        /* 包 --sidebar-accent-foreground（暗） */
+	--side-hover-bg: #232323;
+}
+
+/* 亮色：取自包的 :root 段（--background #ffffff / --muted #eff1f4 / --accent #dbeafe） */
+:root[data-theme="light"] {
+	color-scheme: light;
+	--bg-app: #eff1f4;          /* --muted：画布用安静的那一档 */
+	--bg-panel: #ffffff;        /* --background */
+	--bg-raised: #f9f9fa;       /* --popover */
+	--bg-sunken: #e9ecf0;
+	--bg-selected: #dbeafe;     /* --accent */
+	/* 同暗色：比 --border(#ebebeb) 更深，保住区域可分 */
+	--line: #dfe3e8;
+	--line-soft: #eff1f4;
+	--line-strong: #c9ced6;
+	--ink: #0e1115;             /* --foreground */
+	--ink-dim: #333942;         /* --secondary-foreground */
+	--muted: #7f8d9f;           /* --muted-foreground */
+	--ink-on-accent: #ffffff;
+	--accent: #4285f4;          /* --primary */
+	--accent-hover: #1a73e8;
+	--accent-soft: rgba(66, 133, 244, 0.12);
+	--ok: #188038;
+	--warn: #b06000;
+	--warn-bg: #fef7e0;
+	--warn-line: #f0d9a0;
+	--err: #d93025;
+	--err-bg: #fce8e6;
+	--bezel: #2b3037;
+	--scrim: rgba(20, 24, 30, 0.35);
+	--shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.06);
+	--hl: #b9f18d;
+	/* 按钮专用令牌（值取自包，名字避开外壳的同名不同义项） */
+	--btn-line: var(--line);
+	--btn-secondary-bg: #dbeafe;       /* 包 --secondary（亮） */
+	--btn-secondary-ink: #333942;      /* 包 --secondary-foreground（亮） */
+	--btn-hover-bg: #dbeafe;           /* 包 --accent（亮，浅蓝底） */
+	--btn-hover-ink: #003e8f;          /* 包 --accent-foreground（亮） */
+	--btn-disabled-bg: #eff1f4;        /* 包 --muted（亮） */
+	--btn-disabled-ink: #7f8d9f;       /* 包 --muted-foreground（亮） */
+	/* 侧栏专用令牌（包 --sidebar 那一组） */
+	--side-bg: #f0f6ff;
+	--side-ink: #0e1115;
+	--side-line: #d7e2ef;              /* 比包里的 --sidebar-border 深一档，理由同 --line */
+	--side-active-bg: #dbeafe;         /* 包 --sidebar-accent */
+	--side-active-ink: #003e8f;        /* 包 --sidebar-accent-foreground */
+	--side-hover-bg: #e5eefb;
+	--font-sans: "DM Sans", ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+	--radius: 8px;
+	/* 圆角梯度：包里是 calc(radius ∓ 若干)，展开成实际值免得每次算 */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+}
+
+/*
+ * 浅蓝：包本身只有亮/暗两套，这一套是**从包的调色板推导**的——
+ * 底色用它的 `--sidebar: #f0f6ff`（那正是一档浅蓝），强调色仍用 `--primary`。
+ * 这样三个主题同源，不会出现"蓝主题跟另外两个不像一套"的割裂。
+ */
+:root[data-theme="blue"] {
+	color-scheme: light;
+	--bg-app: #dce8fa;
+	--bg-panel: #f0f6ff;        /* --sidebar */
+	--bg-raised: #ffffff;
+	--bg-sunken: #e2edfd;
+	--bg-selected: #cfe1fb;
+	--line: #bccfe8;
+	--line-soft: #dbe8f8;
+	--line-strong: #93aed0;
+	--ink: #0e1115;
+	--ink-dim: #2c4463;
+	--muted: #6f89a8;
+	--ink-on-accent: #ffffff;
+	--accent: #4285f4;
+	--accent-hover: #1a73e8;
+	--accent-soft: rgba(66, 133, 244, 0.14);
+	--ok: #188038;
+	--warn: #b06000;
+	--warn-bg: #fef7e0;
+	--warn-line: #f0d9a0;
+	--err: #d93025;
+	--err-bg: #fce8e6;
+	--bezel: #1e3a5f;
+	--scrim: rgba(16, 35, 59, 0.32);
+	--shadow-panel: 0 1px 2px rgba(16, 35, 59, 0.08);
+	--hl: #b9f18d;
+	/* 按钮专用令牌：浅蓝主题沿用包的浅蓝档，但文字用与底色同系的深蓝 */
+	--btn-line: var(--line);
+	--btn-secondary-bg: #dbeafe;
+	--btn-secondary-ink: #1e3a5f;
+	--btn-hover-bg: #dbeafe;
+	--btn-hover-ink: #0b3d8c;
+	--btn-disabled-bg: #dce8fa;
+	--btn-disabled-ink: #6f89a8;
+	/* 侧栏专用令牌：浅蓝主题下侧栏最浅、画布最深，形成"导航浮在上面"的层次 */
+	--side-bg: #f0f6ff;
+	--side-ink: #0e1115;
+	--side-line: #c8dcf2;
+	--side-active-bg: #dbeafe;
+	--side-active-ink: #0b3d8c;
+	--side-hover-bg: #e2edfd;
+	--font-sans: "DM Sans", ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+	--radius: 8px;
+	/* 圆角梯度：包里是 calc(radius ∓ 若干)，展开成实际值免得每次算 */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+}
+
+
+/*
+ * 悬停提示的配色：**三个主题共用一套深色提示**。
+ * 提示是"浮在上面的一层说明"，不该跟着主题走——跟着走会让亮色主题下的
+ * 提示变成浅色块，反而看不清。深色气泡在任何主题上都成立。
+ */
+:root {
+	--tip-bg: #1f1f1f;
+	--tip-ink: #f2f2f2;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * 区域分层。
+ *
+ * 「分不清区域」不只是颜色深浅问题——相邻区域如果都是平的一块色，
+ * 即使色值不同也难分辨。所以这里用三重手段叠加：
+ *   1. 层次底色差（app / panel / raised 三级，逐级抬升）
+ *   2. 1px 分界线（每个主题里都与两侧都有对比）
+ *   3. 面板朝画布投一点阴影，读起来就是「浮在画布上面」
+ * 三条同时成立，任何主题下区域边界都清楚。
+ */
+html, body {
+	font-family: var(--font-sans);
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	background: var(--bg-app);
+	color: var(--ink);
+	font: 13px/1.5 ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* ---- 顶栏 ---- */
+.bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	background: var(--bg-panel);
+	border-bottom: 1px solid var(--line);
+	flex: 0 0 auto;
+	/* 让顶栏可以拖动窗口（与 DSH 桌面端一致的观感）——但按钮上不拖。 */
+	-webkit-app-region: drag;
+	box-shadow: var(--shadow-panel);
+}
+.bar button, .bar .zoom { -webkit-app-region: no-drag; }
+.brand { font-weight: 600; }
+.file { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.spacer { flex: 1 1 auto; }
+
+/*
+ * 按钮：按 Google Copy 设计包的 `.btn` 规范实现。
+ *
+ * 包里的按钮是**三档**：
+ *   .btn            默认 = 透明底 + 细边框（相当于 ghost）
+ *   .btn.primary    实心主色，用于一个区域里唯一的主操作
+ *   .btn.secondary  浅底 + 边框，用于次要操作
+ * 尺寸三档 `sm` / 默认 / `lg`，另外有 disabled 与 focus-visible 态。
+ *
+ * ## 与外壳原按钮的差别（为什么值得改）
+ *
+ * 原来只有"普通按钮 + `.primary`"两种，**没有 ghost 这一档**——而工具栏上
+ * 大多数按钮（适应、重载、撤销）本来就是低频次要操作，用带底色的按钮
+ * 会让工具栏显得很吵。规范里默认档就是透明的，正好对上。
+ *
+ * ## 命名冲突的处理
+ *
+ * 包里的 `--accent` 是**浅蓝 `#dbeafe`**（悬停底色），而外壳的 `--accent` 是
+ * 主色 `#4285f4`。同名不同义，**不能直接套**，所以为按钮单独起了一组
+ * `--btn-*` 令牌，值取自包、名字不与外壳冲突。
+ */
+button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	/* 规范用的是固定高度（36/32/40），不是 padding——这样三档尺寸**
+	   的基线才对齐，混排时不会高低不齐 */
+	height: 32px;
+	padding: 0 12px;
+	background: transparent;
+	color: var(--ink);
+	border: 1px solid var(--btn-line);
+	border-radius: var(--radius);
+	/* 规范里所有 shadow 都是 0 透明度，所以这里是扁平的 */
+	box-shadow: none;
+	font: 500 13px/1 var(--font-sans);
+	white-space: nowrap;
+	cursor: pointer;
+	transition: background-color .15s, border-color .15s, color .15s, filter .15s;
+}
+button:hover { background: var(--btn-hover-bg); color: var(--btn-hover-ink); }
+/* 聚焦环：规范用 outline 而不是 border，因为 outline 不占布局、
+   不会让按钮在聚焦时位移。 */
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 按下时下沉 1px：规范里的手感细节，成本极低但按起来"有回应" */
+button:active { transform: translateY(1px); }
+button:disabled {
+	background: var(--btn-disabled-bg);
+	color: var(--btn-disabled-ink);
+	border-color: transparent;
+	cursor: not-allowed;
+	transform: none;
+}
+
+/* 主操作：一个区域里只该有一个 */
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--ink-on-accent); }
+/* 规范用亮度滤镜做悬停，而不是换一个色值——这样任何主题下
+   "比原色深一点"都自动成立，不需要为每个主题各配一个 hover 色 */
+button.primary:hover { background: var(--accent); color: var(--ink-on-accent); filter: brightness(.96); }
+
+/* 次要操作：浅底 + 边框 */
+button.secondary {
+	background: var(--btn-secondary-bg);
+	color: var(--btn-secondary-ink);
+	border-color: var(--btn-line);
+}
+
+/* 小尺寸：用于面板内部密集的按钮 */
+button.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+
+/*
+ * ⚠ **按钮里内容超过一行时，必须解除固定高度。**
+ *
+ * 规范里的 `height: 32px` 是给「一行文字 + 图标」定的。凡是塞了多行内容的按钮
+ * （色卡 = 色块 + 名字 + 色值，图标格 = 图形 + 名字），固定高度会让内容
+ * **溢出并叠在一起**——文字看着像糊成一团。
+ *
+ * 这不是理论问题：加 `height: 32px` 那次，主题页签的色卡当场就糊了，
+ * 而且**代码上看不出来**（声明都正常，只有渲染结果不对）。
+ *
+ * **以后凡是往 button 里放多行内容，都要在这里补一条。**
+ */
+.library-swatch-card,
+.library-icon { height: auto; }
+
+/* 开关型按钮的按下态：一眼看出「选择模式」现在是开还是关。
+   它复用主操作的实心样式——"开着"是一种强调状态。 */
+button.active { background: var(--accent); border-color: var(--accent); color: var(--ink-on-accent); }
+button.active:hover { background: var(--accent); filter: brightness(.96); }
+
+/* ---- 图标按钮 ---- */
+/*
+ * 借 OpenDesign 的做法：工具栏只放图标，文字放进悬停提示。
+ * 这样工具栏安静下来，高频按钮的位置也固定好记。
+ *
+ * **但可发现性不能丢**：文字仍在 `data-tip`（悬停显示）和 `aria-label`（读屏）。
+ * 一个既没文字提示又没标签的图标按钮是坏设计。
+ */
+button.icon {
+	width: 30px;
+	padding: 0;
+	color: var(--ink);
+}
+button.icon .glyph { font-size: 15px; line-height: 1; }
+
+/* ---- 悬停提示 ---- */
+/*
+ * 为什么不用原生 `title`：它有 1 秒左右延迟、样式不可控、而且在按钮上
+ * 会和点击冲突（快速点两下会弹出系统提示）。
+ * 自己画一个：立刻出现、可排版、可加多行说明。
+ */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+	content: attr(data-tip);
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 400;
+	max-width: 260px;
+	width: max-content;
+	padding: 6px 9px;
+	background: var(--tip-bg);
+	color: var(--tip-ink);
+	border-radius: var(--radius-sm);
+	font-size: 11px;
+	font-weight: 400;
+	line-height: 1.5;
+	text-align: left;
+	white-space: normal;
+	pointer-events: none;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+}
+/* 靠右的按钮提示往左收，否则会被窗口裁掉 */
+.bar > [data-tip]:nth-last-child(-n+4):hover::after,
+.zoom-group [data-tip]:hover::after { left: auto; right: 0; transform: none; }
+
+.zoom-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	padding: 1px 2px;
+}
+
+/* 主题切换：三段式，一眼看到当前是哪个（不再靠猜）。 */
+.theme-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	padding: 1px 2px;
+}
+.theme-group button {
+	padding: 1px 8px;
+	background: transparent;
+	border-color: transparent;
+	color: var(--muted);
+}
+.theme-group button:hover { background: var(--bg-raised); border-color: transparent; color: var(--ink); }
+.theme-group button.active {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--ink-on-accent);
+}
+.zoom-btn {
+	padding: 1px 7px;
+	font-size: 13px;
+	line-height: 18px;
+	background: transparent;
+	border-color: transparent;
+}
+.zoom-btn:hover { background: var(--bg-raised); border-color: transparent; }
+
+.zoom {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--muted);
+	min-width: 48px;
+	text-align: center;
+	cursor: pointer;
+}
+.zoom:hover { color: var(--ink); }
+
+/* ---- 警告条 ---- */
+.warnings {
+	flex: 0 0 auto;
+	background: var(--warn-bg);
+	color: var(--warn);
+	border-bottom: 1px solid var(--warn-line);
+	padding: 6px 12px;
+	font-size: 12px;
+	white-space: pre-wrap;
+}
+
+/* ---- 主体：左侧工作区列表 + 右侧画布 ---- */
+.body {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+/*
+ * 侧栏：按设计包的 sidebar 规范。
+ *
+ * ## 关键变化：导航区有了自己的底色
+ *
+ * 原来是 `--bg-panel`——**和右侧内容面板同一个颜色**，靠 1px 线分开。
+ * 包里 sidebar 是**独立的一档底色**（亮 `#f0f6ff`、暗 `#171717`），
+ * 于是"我在导航区"和"我在内容区"不用靠找线上判断，余光就能分清。
+ *
+ * 同时去掉阴影：规范整套是扁平的，用色阶 + 边线分区，不靠投影。
+ */
+.side {
+	flex: 0 0 264px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	background: var(--side-bg);
+	color: var(--side-ink);
+	border-right: 1px solid var(--side-line);
+}
+
+/* ---- 分隔条：拖动改侧栏宽度（和 DSH 自己的侧边栏一个手感）---- */
+.splitter {
+	flex: 0 0 5px;
+	cursor: col-resize;
+	background: transparent;
+	position: relative;
+	z-index: 2;
+}
+.splitter:hover, .splitter.dragging { background: var(--accent); }
+/* 加宽热区：5px 的细线看着清楚，但直接点太费劲。 */
+.splitter::after { content: ""; position: absolute; inset: 0 -3px; }
+
+/*
+ * ---- 侧边栏收起 ----
+ *
+ * 用 `display: none` 而不是把宽度设成 0：
+ * 宽度 0 的侧栏仍然参与 flex 布局，里面那些固定宽度的东西
+ *（页签按钮、搜索框、列表项）会**溢出**出来变成一条古怪的细线。
+ * `display: none` 干净地把它从布局里摘掉，视口自动占满。
+ *
+ * 分隔条一起收 —— 侧栏都没了，留一条能拖的缝只会让人困惑。
+ */
+.side.collapsed { display: none; }
+.splitter.collapsed { display: none; }
+
+/*
+ * ---- 侧栏页签：画板 / 图层 / 库
+ *
+ * 规范里的导航项是**圆角药丸**，选中项填充 `--sidebar-accent`。
+ * 原来做成"贴着下面面板的标签页"——那让侧栏看起来像内容区的一部分，
+ * 而不是独立的一层导航。
+ */
+.side-tabs {
+	display: flex;
+	flex: 0 0 auto;
+	gap: 4px;
+	padding: 8px;
+	background: var(--side-bg);
+}
+.side-tabs button {
+	flex: 1 1 0;
+	height: 30px;
+	padding: 0 6px;
+	background: transparent;
+	border-color: transparent;
+	border-radius: var(--radius-md);
+	color: var(--side-ink);
+	/* 未选中不靠"更淡的颜色"区分（那会带对比度问题），靠透明度——
+	   文字色仍是同一档，只是弱下去，选中时提回来 */
+	opacity: .7;
+	font-weight: 500;
+}
+.side-tabs button:hover { background: var(--side-hover-bg); opacity: 1; }
+.side-tabs button[aria-pressed="true"] {
+	background: var(--side-active-bg);
+	border-color: transparent;
+	color: var(--side-active-ink);
+	font-weight: 600;
+	opacity: 1;
+}
+
+/* 页签容器要能撑满剩余高度，否则下面的列表滚不动 */
+.side-pane {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.side-pane[hidden] { display: none; }
+
+/* ---- 图层树 ---- */
+.layer-tree { padding: 4px 6px 8px; }
+.layer-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	width: 100%;
+	height: 22px;
+	padding: 0 4px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	box-shadow: none;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.layer-row:hover { background: var(--bg-raised); border-color: var(--line); }
+.layer-row.is-selected { background: var(--bg-selected); border-color: var(--accent); }
+/* display:none 的图层仍然列出来，但淡化——找不到比看不见更让人困惑 */
+.layer-row.is-hidden { opacity: .45; }
+
+.layer-caret {
+	flex: 0 0 auto;
+	width: 14px;
+	text-align: center;
+	color: var(--muted);
+	font-size: 10px;
+	cursor: pointer;
+	user-select: none;
+}
+.layer-caret.is-leaf { visibility: hidden; }
+.layer-tag {
+	flex: 0 0 auto;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	/* `--accent-ink` 从未定义 → 颜色变继承。图层树里的标签用强调色 */
+	color: var(--accent);
+}
+.layer-name {
+	flex: 0 1 auto;
+	font-size: 12px;
+	color: var(--ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.layer-text {
+	flex: 1 1 auto;
+	font-size: 11px;
+	color: var(--muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* 层级缩进用左侧竖线表达，比纯空白更容易看出归属 */
+.layer-indent {
+	flex: 0 0 auto;
+	width: 10px;
+	align-self: stretch;
+	border-left: 1px solid var(--line-soft);
+}
+.layer-indent.is-none { border-left-color: transparent; }
+.layer-empty { padding: 14px 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+/* 图层行上的操作按钮：默认隐形，悬停或已生效时才出现——
+   一屏几十行，常驻图标会把树变成一堵墙。 */
+.layer-act {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+	color: var(--muted);
+	font-size: 11px;
+	line-height: 1;
+	opacity: 0;
+}
+.layer-row:hover .layer-act { opacity: .7; }
+.layer-act:hover { opacity: 1; background: var(--bg-panel); color: var(--ink); }
+/* 已隐藏 / 已锁定是**状态**，必须一直看得见，否则用户不知道这行为什么点不中 */
+.layer-act.is-on { opacity: 1; color: var(--accent); }
+.layer-row.is-locked { opacity: .6; }
+
+/* 图层工具条：新建入口放这里 */
+.layer-bar {
+	flex: 0 0 auto;
+	display: flex;
+	gap: 4px;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--line);
+}
+.layer-bar button { flex: 0 0 auto; height: 24px; padding: 0 8px; font-size: 12px; }
+.layer-bar .grow { flex: 1 1 auto; }
+
+/* 新建面板：选元素类型 */
+.layer-new {
+	flex: 0 0 auto;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--line);
+	background: var(--bg-raised);
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 4px;
+}
+.layer-new[hidden] { display: none; }
+.layer-new button { height: 26px; font-size: 12px; }
+
+/* 右键菜单 */
+.layer-menu {
+	position: fixed;
+	z-index: 40;
+	min-width: 168px;
+	padding: 4px;
+	background: var(--bg-panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	box-shadow: 0 8px 24px var(--scrim);
+}
+.layer-menu[hidden] { display: none; }
+.layer-menu button {
+	display: block;
+	width: 100%;
+	height: 26px;
+	padding: 0 8px;
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+	text-align: left;
+	font-size: 12px;
+	border-radius: var(--radius-sm);
+}
+.layer-menu button:hover { background: var(--bg-raised); border-color: var(--line); }
+.layer-menu button.is-danger:hover { color: #ff8a80; border-color: #ff8a80; }
+.layer-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+
+/* ---- 设计库面板 ---- */
+.library-bar {
+	flex: 0 0 auto;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--line);
+}
+.library-bar button { width: 100%; height: 26px; font-size: 12px; }
+.library-panel {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.library-head { display: flex; gap: 4px; padding: 6px 8px 0; }
+/*
+ * ★ 设计包下拉 + 搜索框：对齐画板里那个搜索框的风格（用户要求）
+ *
+ * 原来这两条**只设了尺寸**：
+ *
+ *   .library-select { flex: 1 1 auto; height: 24px; font-size: 12px; }
+ *   .library-search { margin: 6px 8px; height: 24px; font-size: 12px; }
+ *
+ * 没有 `border` / `background` / `border-radius` —— 于是走浏览器默认：
+ * **白底、直角、系统字体**，在暗色侧栏里就是两块突兀的白块。
+ *
+ * 目标风格来自画板（原型）里的 `.side-head input`：
+ *   高 28px、padding 0 8px、1px 实线边框、圆角 8px、
+ *   `--bg-sunken` 底、`--muted` 的 placeholder。
+ *
+ * ⚠️ 圆角这里用 `var(--radius)`（8px）**不是** `var(--radius-md)`（6px）——
+ * 外壳两个都有，而画板用的是 8px。要"看起来一样"就得对齐数值，
+ * 不能只看变量名像就抄。
+ */
+.library-select,
+.library-search {
+	/*
+	 * ★ 用 `min-height` 而不是 `height` —— **`<input>` 吃不到 `height`**
+	 *
+	 * 实测（`_tools/experiment-input-height.mjs`，在页面里注入各种写法看哪种生效）：
+	 *
+	 * ```
+	 * 原始                     height=16.6667px   （12px 字体的默认高度）
+	 * 内联 height: 28px        height=16.6667px   ← 不生效
+	 * 内联 height !important   height=16.6667px   ← 连 !important 都压不住
+	 * 内联 min-height: 28px    height=28px        ← ★ 只有这个生效
+	 * ```
+	 *
+	 * 所以**不是优先级问题**（`!important` 都无效），而是 `<input>` 的高度
+	 * 有另一套计算。这个坑最难的地方在于：**同一条规则里的 `border` /
+	 * `background` / `border-radius` / `appearance` 全都生效了**，
+	 * 只有 `height` 被忽略 —— 看着"改了"，实际只差高度。
+	 *
+	 * `min-height` 对 `<select>` 一样管用，所以两个元素共用一条就够。
+	 */
+	min-height: 28px;
+	padding: 0 8px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--bg-sunken);
+	color: var(--ink);
+	font: 12px var(--font-sans);
+	outline: none;
+}
+.library-select { flex: 1 1 auto; min-width: 0; }
+/* 聚焦时给个和画板一致的提示色 —— 不然点进去毫无反馈 */
+.library-select:focus,
+.library-search:focus { border-color: var(--accent); }
+.library-search::placeholder { color: var(--muted); }
+.library-search {
+	display: block;
+	margin: 6px 8px;
+	/*
+	 * ★ **`appearance: none` 是必须的**，否则上面那个 `height: 28px` 不生效。
+	 *
+	 * `<input type="search">` 在 Blink/WebKit 里默认 `-webkit-appearance: searchfield`，
+	 * 它带着自己的尺寸计算 —— 实测这个元素只有 **17px** 高（12px 字体的内容高度），
+	 * `height: 28px` 被整个忽略。
+	 *
+	 * 这个坑很隐蔽：`border` / `background` / `border-radius` 都生效了
+	 *（所以看着"改了"，颜色圆角都对），**只有高度不对** ——
+	 * 而高度差 11px 在截图里一眼就能看出来，却是唯一没生效的那条。
+	 *
+	 * 代价：系统自带的搜索清除按钮（×）会一起消失。
+	 * 那个按钮在暗色下本来也是浅色的，去掉反而统一。
+	 */
+	appearance: none;
+	-webkit-appearance: none;
+}
+.library-act { flex: 0 0 auto; width: 26px; height: 28px; padding: 0; font-size: 13px; }
+.library-tabs { display: flex; gap: 2px; padding: 6px 8px 0; }
+.library-tabs button {
+	flex: 1 1 0;
+	height: 22px;
+	padding: 0 4px;
+	font-size: 11px;
+	background: transparent;
+	border-color: transparent;
+	color: var(--muted);
+	box-shadow: none;
+}
+.library-tabs button:hover { background: var(--bg-raised); color: var(--ink); }
+.library-tabs button[aria-pressed="true"] {
+	background: var(--bg-raised);
+	border-color: var(--line);
+	color: var(--ink);
+	font-weight: 600;
+}
+/* 原来这里还有一条 `.library-search { height: 24px; font-size: 12px }` ——
+   它排在新的那组规则**后面**，CSS 层叠会把高度又压回 24px。
+   样式表里同一个选择器出现两次、后一条只改一半属性，是这类"改了没生效"的常见原因。 */
+.library-list { flex: 1 1 auto; overflow: auto; padding: 0 6px 8px; }
+.library-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-height: 26px;
+	padding: 3px 6px;
+	margin-bottom: 2px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	box-shadow: none;
+	text-align: left;
+}
+.library-item:hover { background: var(--bg-raised); border-color: var(--line); }
+/* 从画布存进来的组件要和设计包自带的区分开，否则分不清哪些是自己攒的 */
+.library-item.is-saved { border-left: 2px solid var(--accent); }
+.library-swatch {
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	border-radius: 3px;
+	border: 1px solid var(--line);
+}
+.library-label { flex: 0 1 auto; font-size: 12px; color: var(--ink); }
+.library-detail {
+	flex: 1 1 auto;
+	font-size: 10px;
+	font-family: var(--font-mono);
+	color: var(--muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.library-empty { padding: 14px 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+/* ---- 主题：色卡 ---- */
+/* 色块要大、名字要在上面。用户是"看到蓝色点它"，不是在列表里找 #4285f4。 */
+.library-group {
+	padding: 8px 8px 4px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--muted);
+}
+/*
+ * 色板卡片同理（见 `.library-icons` 那段说明）：
+ * 侧栏是可拖宽的，固定 3 列在宽侧栏里会空出大片。
+ *
+ * 下限给 88px（比图标大）：卡片有 border + padding + 文字，
+ * 再窄的话颜色块会被压成一条。
+ *
+ * **不改** `repeat(3, 1fr)` 的 `.layer-new` —— 那是 3 个固定功能按钮
+ *（新建/折叠/…），数量不随宽度变，自动排列反而会让它们忽大忽小。
+ */
+.library-swatches {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+	gap: 6px;
+	padding: 0 8px 6px;
+}
+.library-swatch-card {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 0 0 4px;
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	box-shadow: none;
+	overflow: hidden;
+	cursor: pointer;
+	text-align: left;
+}
+.library-swatch-card:hover { border-color: var(--accent); }
+.library-chip { display: block; height: 30px; border-bottom: 1px solid var(--line); }
+.library-chip-name {
+	padding: 0 5px;
+	font-size: 11px;
+	line-height: 1.35;
+	color: var(--ink);
+	/* 中文名（「主色上的文字」）比英文长，允许折两行而不是截断——
+	   截断后「主色上的文字」和「主色上的文」看不出区别 */
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.library-chip-value {
+	padding: 0 5px;
+	font-size: 9px;
+	font-family: var(--font-mono);
+	color: var(--muted);
+}
+
+/* ---- 组件：实时预览卡 ---- */
+
+/*
+ * 长按卡片后跟着鼠标走的"抓取"标签。
+ *
+ * `pointer-events: none` 是**必须的**：ghost 跟在光标旁边，
+ * 如果它能接收指针事件，`pointerup` 就会落在它身上而不是画板上，
+ * 落点判定全部失效（这类"多出来的元素挡住事件"很难一眼看出来）。
+ */
+/*
+ * 拖动时跟着鼠标的图标。
+ *
+ * **只有图标，没有文字** —— 用户明确要求（"只需要图标本身，不需要那段注释文字"）。
+ * 拖着东西时视线跟着鼠标，旁边多一截文字反而看不清自己在拖什么。
+ * 名字在 `title` 里，需要时悬停能看到。
+ */
+.library-ghost {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 2147483000;
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	background: var(--accent);
+	color: #fff;
+	pointer-events: none;
+	/* 阴影用**字面色值**：`var(--scrim)` 解析失败时整条声明失效，看起来像"一块黑边"。 */
+	box-shadow: 0 6px 16px rgba(0, 0, 0, .32);
+}
+
+/*
+ * ghost 里的内容：图标/形状按原样画，超出圆形就裁掉。
+ *
+ * 固定尺寸 + `overflow: hidden` 是必须的：组件本来可能是 300px 宽的卡片，
+ * 直接摊开会把 ghost 撑成一坨。
+ */
+.library-ghost-art {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	overflow: hidden;
+	color: #fff;
+}
+.library-ghost-art svg { width: 18px; height: 18px; display: block; }
+.library-ghost-art > * { max-width: 22px; max-height: 22px; }
+
+/* 拖动中，鼠标下面那块将要落进去的画板。 */
+.board.drop-target .board-frame {
+	outline: 3px solid var(--accent);
+	outline-offset: 2px;
+	/* 再叠一层内阴影：只靠 outline 在浅色画板上不够显眼 */
+	box-shadow: 0 0 0 6px rgba(26, 115, 232, .18);
+}
+
+.library-card {
+	margin: 0 8px 8px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	overflow: hidden;
+}
+.library-card-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 8px;
+	background: var(--bg-raised);
+	border-bottom: 1px solid var(--line);
+}
+.library-card-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+.library-card-cat { flex: 1 1 auto; font-size: 10px; color: var(--muted); }
+.library-card-add { flex: 0 0 auto; height: 20px; padding: 0 8px; font-size: 11px; }
+/* 预览是沙箱 iframe：隔离设计包的 CSS，不让它改到画布工具自己的界面 */
+.library-card-preview {
+	display: block;
+	width: 100%;
+	height: 76px;
+	border: 0;
+	background: #fff;
+	/*
+	 * ⚠️ **`pointer-events: none` 必须加**，否则长按拖拽会失效。
+	 *
+	 * 实测（用户报「长按拖拽没生效」）：这个 iframe 高 76px，占了卡片下半部分。
+	 * 指针落在它上面时，`pointerdown` 在 **iframe 自己的文档里**触发，
+	 * **不会冒泡到外层卡片的监听** —— 长按完全没反应。
+	 * 而卡片上半部分（标题区）长按是好的，所以看起来像"时灵时不灵"。
+	 *
+	 * （同一个坑在画板上踩过：画板也是 iframe，事件不会冒泡到外壳。）
+	 *
+	 * 预览本来就是**纯展示**（`sandbox=""` 不执行脚本），禁掉指针事件没有损失，
+	 * 顺手还解决了"长按时选中了预览里的文字"。
+	 */
+	pointer-events: none;
+}
+.library-card-note {
+	padding: 5px 8px;
+	font-size: 10px;
+	line-height: 1.5;
+	color: var(--muted);
+	border-top: 1px solid var(--line-soft);
+}
+
+/* ---- 图形：图标网格 ---- */
+/*
+ * 列数**跟着侧栏宽度走**，不是写死的。
+ *
+ * ## 为什么原来不行（用户："把这部分做成会跟着侧边栏大小而自动换行变化排列数量"）
+ *
+ * 原来写的是 `repeat(4, 1fr)` —— **永远 4 列**。
+ * 用户把侧栏从 264px 拖到 653px 之后，右边空出两大片，
+ * 而图标还是挤在左边 4 列里。空间被白白浪费，而且要滚很久才看完 671 个图标。
+ *
+ * ## 为什么用 auto-fill + minmax 而不是媒体查询
+ *
+ * 侧栏宽度是**用户可拖动**的（`bindSplitter`），任何时刻都可能变，
+ * 而且不触发窗口 resize —— **媒体查询在这里根本用不上**
+ *（它只能看视口宽度，看不到容器宽度）。
+ *
+ * `repeat(auto-fill, minmax(64px, 1fr))` 是纯 CSS 的方案：
+ * 浏览器按容器实际宽度算能塞几列，每列至少 64px、多余空间平分。
+ * 拖动分隔条时**实时跟着变**，一行 JS 都不用写。
+ *
+ * - `auto-fill`（而不是 `auto-fit`）：栏位数量算得一样，
+ *   但 `auto-fill` 会**保留空轨道**，图标不会被拉得巨大 ——
+ *   4 个图标在 653px 里被拉成 160px 一格会很难看。
+ * - `64px` 是下限：图标 20px + 左右 padding 4px + 名字（9px 字号）
+ *   在 56px 左右还读得出来，64px 留了点余量。
+ */
+.library-icons {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+	gap: 4px;
+	padding: 0 8px 8px;
+}
+.library-icon {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	padding: 6px 2px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	box-shadow: none;
+	cursor: pointer;
+}
+.library-icon:hover { background: var(--bg-raised); border-color: var(--line); }
+.library-icon-art {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	color: var(--ink);
+}
+.library-icon-name {
+	font-size: 9px;
+	color: var(--muted);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---- 规范：文档 ---- */
+.library-doc { margin: 0 8px 6px; }
+.library-doc summary {
+	padding: 6px 4px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+}
+.library-doc-text {
+	margin: 0;
+	padding: 8px;
+	max-height: 340px;
+	overflow: auto;
+	background: var(--bg-sunken);
+	border: 1px solid var(--line);
+	border-radius: 5px;
+	font: 10px/1.6 ui-monospace, Consolas, monospace;
+	color: var(--ink-dim);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.side-head { padding: 8px; border-bottom: 1px solid var(--side-line); }
+.side-head input {
+	width: 100%;
+	background: var(--bg-sunken);
+	color: var(--ink);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	padding: 5px 8px;
+	font: inherit;
+	font-size: 12px;
+}
+.side-head input:focus { outline: none; border-color: var(--accent); }
+.side-list { flex: 1 1 auto; overflow: auto; padding: 4px 0; }
+.side-foot {
+	flex: 0 0 auto;
+	padding: 6px 8px;
+	/* 侧栏内部的线也走侧栏自己的色，否则浅蓝底上会横着一条灰线 */
+	border-top: 1px solid var(--side-line);
+	font-size: 11px;
+	color: var(--muted);
+}
+
+/* 一个路径 = 一组（同路径的不同设备并排对比就落在同一组里）。 */
+.group-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px 3px;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--muted);
+}
+.group-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-add {
+	flex: 0 0 auto;
+	padding: 0 5px;
+	font-size: 11px;
+	line-height: 16px;
+	background: var(--bg-raised);
+}
+
+.item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	background: transparent;
+	border: 0;
+	border-left: 2px solid transparent;
+	border-radius: 0;
+	padding: 5px 8px 6px 10px;
+	cursor: pointer;
+}
+.item:hover { background: var(--bg-raised); border-color: var(--line-strong); }
+.item.active { background: var(--bg-selected); border-left-color: var(--accent); }
+.item-name { display: block; font-size: 12px; color: var(--ink); }
+.item-meta { display: block; font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.item-spec {
+	display: block;
+	font-size: 11px;
+	color: var(--warn);
+	margin-top: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.item-spec.empty { color: var(--muted); font-style: italic; }
+
+/* 行内编辑规格：它就是「规格沉淀」的入口，所以点一下就能改。 */
+.spec-input {
+	width: 100%;
+	background: var(--bg-sunken);
+	color: var(--ink);
+	border: 1px solid var(--accent);
+	border-radius: var(--radius-sm);
+	padding: 2px 5px;
+	font: inherit;
+	font-size: 11px;
+	margin-top: 2px;
+}
+.side-empty { padding: 14px 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+/* ---- 画布视口 ---- */
+.viewport {
+	position: relative;
+	flex: 1 1 auto;
+	overflow: hidden;
+	/* 点阵背景：给出「这是无限画布」的视觉线索，并且随缩放变化。 */
+	background-color: var(--bg-app);
+	background-image: radial-gradient(circle, var(--line-soft) 1px, transparent 1px);
+	background-size: 24px 24px;
+	cursor: default;
+}
+.viewport.panning { cursor: grabbing; }
+
+.world {
+	position: absolute;
+	left: 0;
+	top: 0;
+	transform-origin: 0 0;
+	/* 只有 transform 参与动画，避免布局抖动。 */
+	will-change: transform;
+}
+
+/* ---- 空状态 ---- */
+/* ---- 形状参数面板 ---- */
+.shape-panel { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.sp-empty { padding: 14px 10px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.sp-head {
+	padding: 8px 10px 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+}
+.sp-group { padding: 0 0 6px; border-bottom: 1px solid var(--line-soft); margin-bottom: 6px; }
+.sp-group:last-child { border-bottom: 0; }
+.sp-group-title {
+	padding: 6px 10px 2px;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: .04em;
+	color: var(--muted);
+}
+.sp-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
+	min-height: 24px;
+}
+.sp-label { flex: 0 0 34px; font-size: 11px; color: var(--ink-dim); }
+.sp-control { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sp-color {
+	width: 26px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	cursor: pointer;
+}
+.sp-swatches { display: flex; gap: 3px; flex-wrap: wrap; }
+.sp-swatch {
+	width: 14px;
+	height: 14px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 3px;
+	cursor: pointer;
+}
+.sp-swatch:hover { transform: scale(1.15); }
+.sp-range { flex: 1 1 auto; min-width: 0; height: 18px; }
+.sp-number {
+	flex: 0 0 48px;
+	height: 22px;
+	padding: 0 4px;
+	font-size: 11px;
+	text-align: right;
+}
+/*
+ * 效果内容输入框（悬停浮窗的菜单文本 / 悬停提示的气泡文本）。
+ *
+ * 和 `.sp-number` 不同：它是**左对齐的文本**而且要占满剩余宽度 ——
+ * 内容可能有"重命名 / 删除 / 分享"这么长，挤在 48px 里没法看。
+ */
+.sp-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 22px;
+	padding: 0 6px;
+	font-size: 11px;
+}
+
+/* ---- 关联（连通 → 关联） ---- */
+
+.sp-add-link {
+	flex: 1 1 auto;
+	height: 24px;
+	border: 1px dashed var(--line);
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--ink-dim);
+	font-size: 11px;
+	cursor: pointer;
+}
+.sp-add-link:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 已建立的关联：目标名（可能很长，要能截断）+ 方向 + 删除 */
+.sp-link-target {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 11px/1.6 ui-monospace, Consolas, monospace;
+	color: var(--ink);
+}
+.sp-link-dir {
+	flex: 0 0 auto;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--bg-raised);
+	color: var(--muted);
+	font-size: 10px;
+}
+.sp-link-del {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: none;
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1;
+	cursor: pointer;
+}
+.sp-link-del:hover { background: var(--danger, #d93025); color: #fff; }
+
+.sp-empty-inline { padding: 0 8px 6px; font-size: 10px; color: var(--muted); }
+
+/*
+ * 「关联模式」横幅。
+ *
+ * 必须显眼：这个模式下**画布点击不再选中元素**，不说明的话
+ * 用户会以为"画布坏了"（前面踩过好几次"模式变了但没提示"的坑）。
+ */
+.link-banner {
+	position: absolute;
+	top: 10px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 40;
+	padding: 6px 14px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 12px;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+	pointer-events: none;
+}
+.link-banner[hidden] { display: none; }
+
+/* 关联模式下画布是十字光标 */
+body.link-picking .viewport { cursor: crosshair; }
+
+/*
+ * 关联连线覆盖层。
+ *
+ * `pointer-events: none` 是**必须的** —— 它是纯装饰，盖在画布上，
+ * 能接收事件的话用户就点不中任何东西（这个坑在 ghost 上踩过一次）。
+ *
+ * 用 SVG 而不是一堆 DIV：连线要表达**方向**（目标端画圆点）、
+ * 后面还要加箭头，都是 SVG 天生就有的。
+ */
+.link-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 25;
+	pointer-events: none;
+	overflow: visible;
+}
+
+/*
+ * 交互提示层（「这里能滑」的色带 + 方向箭头）。
+ *
+ * `pointer-events: none` 同关联连线层 —— 它是装饰，挡住画布的话
+ * 用户点不中任何东西（这个坑在 ghost 上踩过一次）。
+ */
+.hint-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 24;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+/*
+ * 边缘色带。
+ *
+ * 尺寸由 JS 按元素大小算（占 14%、**最小 56px**）——
+ * 调研给的下限：窄元素上按比例算出来可能只有十几像素，那就等于没画。
+ */
+.hint-band {
+	position: absolute;
+	border-radius: 4px;
+	opacity: .85;
+}
+
+/*
+ * 方向箭头。
+ *
+ * **画在色带上而不是内容上**：调研点名过"箭头糊在图片上没人看见"
+ * （NBC.com 的实际案例），色带给了它一个干净的对比底。
+ */
+.hint-arrow {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	font-weight: 700;
+	line-height: 1;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+
+/*
+ * 注释卡片（学 OpenDesign：选中元素后浮出来的那张小卡片）。
+ *
+ * `position: fixed` 而不是 absolute —— 它按**视口坐标**摆（`getBoundingClientRect`
+ * 给的就是视口坐标），放 `absolute` 还得减去滚动偏移，多一层容易错的地方。
+ *
+ * z-index 比连线层和提示层都高：它是**正在操作的界面**，不能被装饰盖住。
+ */
+.comment-card {
+	position: fixed;
+	z-index: 60;
+	/* 320 太窄：`rgb(255, 255, 255)` 这类长值会被截断到看不清，
+	   而"看清当前值"正是这张卡片的核心价值（用户和 Agent 的共同语言） */
+	width: 360px;
+	padding: 10px 12px 12px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	/* ⚠️ 这里原来引用的是 `--surface` —— **那个变量从来没定义过**。
+	   CSS 变量未定义且没有 fallback 时，整条声明**静默失效**：
+	   卡片背景直接变透明，用户看到的是下面的画板内容透出来。
+	   → 用户原话："背景透明的，不太容易看清"。
+	   正确的 token 是 `--bg-panel`（面板色）。 */
+	background: var(--bg-panel);
+	box-shadow: 0 12px 36px rgba(0, 0, 0, .28);
+	font-size: 12px;
+	color: var(--ink);
+}
+.comment-card[hidden] { display: none; }
+
+.cc-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--line);
+}
+.cc-grip { flex: 0 0 auto; color: var(--muted); cursor: grab; user-select: none; }
+.cc-grip:active { cursor: grabbing; }
+.cc-selector {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 12px/1.5 ui-monospace, Consolas, monospace;
+	color: var(--ink);
+}
+.cc-more {
+	flex: 0 0 auto;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--accent);
+	font-size: 11px;
+	cursor: pointer;
+}
+
+/* 元素规格：`Size 183×34` 这样的两列。这一屏是"用户和 Agent 的共同语言" */
+.cc-specs {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 3px 10px;
+	margin: 8px 0;
+}
+.cc-specs dt { color: var(--muted); font-size: 11px; }
+.cc-specs dd {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	/* ⚠️ `min-width: 0` 是必须的：flex 子项默认 `min-width: auto`，
+	   内容会**撑破容器**而不是收缩 —— 于是 `text-overflow: ellipsis` 永远不生效，
+	   长值（`rgb(255, 255, 255)`）直接顶出卡片边界被硬裁掉。
+	   （CSS Grid 的 1fr 轨道同理。） */
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 11px/1.6 ui-monospace, Consolas, monospace;
+}
+/* 颜色值旁边的色块 —— 光看 `oklch(0.5 0.19 255)` 没人知道是什么颜色 */
+.cc-chip {
+	flex: 0 0 auto;
+	width: 12px;
+	height: 12px;
+	border: 1px solid var(--line);
+	border-radius: 3px;
+}
+
+.cc-input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 8px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	/* `--bg` 未定义（同上）→ 输入框背景也是透明的。用 `--bg-sunken`（沉底色） */
+	background: var(--bg-sunken);
+	color: var(--ink);
+	/* 用 token 而不是硬编码字体栈 —— 换主题时字体跟着走 */
+	font: 12px/1.6 var(--font-sans);
+	resize: vertical;
+}
+.cc-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* 附件缩略图（OpenDesign 里附件是显示出来的，不是只给个数字） */
+.cc-thumbs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+.cc-thumbs[hidden] { display: none; }
+.cc-thumb { position: relative; }
+.cc-thumb img {
+	width: 56px;
+	height: 56px;
+	object-fit: cover;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	display: block;
+}
+.cc-thumb-del {
+	position: absolute;
+	top: -6px;
+	right: -6px;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 50%;
+	background: var(--bg-panel);
+	color: var(--ink-dim);
+	font-size: 10px;
+	line-height: 1;
+	cursor: pointer;
+}
+.cc-thumb-del:hover { background: #d93025; color: #fff; }
+
+.cc-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 10px;
+}
+.cc-attach,
+.cc-icon {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	/* `--bg` 未定义 → 附件/关闭按钮也是透明的。用 `--bg-sunken` */
+	background: var(--bg-sunken);
+	color: var(--ink-dim);
+	cursor: pointer;
+}
+.cc-attach:hover,
+.cc-icon:hover { border-color: var(--accent); color: var(--accent); }
+.cc-target {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	color: var(--muted);
+}
+.cc-target.bad { color: #d93025; }
+.cc-send {
+	flex: 0 0 auto;
+	height: 28px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 12px;
+	cursor: pointer;
+}
+.cc-send:disabled { opacity: .45; cursor: not-allowed; }
+.cc-send:not(:disabled):hover { filter: brightness(1.08); }
+
+/*
+ * 效果预览块。
+ *
+ * 它带着和画板里元素**同一个 `data-effect`**，所以吃的是同一份 CSS。
+ * `position: relative` 是必须的：`hover-menu` / `hover-tip` 的浮窗用
+ * `position: absolute` 挂在 `::after` 上，没有定位祖先的话会飞到整个面板外面。
+ */
+.sp-preview-wrap {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px 8px;
+}
+.sp-preview-hint { flex: 0 0 auto; font-size: 10px; color: var(--muted); }
+.sp-preview {
+	position: relative;
+	display: grid;
+	place-items: center;
+	min-width: 56px;
+	height: 26px;
+	padding: 0 10px;
+	border-radius: 6px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 11px;
+	cursor: pointer;
+	/* 让预览块自己成为一个层叠上下文：浮窗会盖在面板其它行上面 */
+	z-index: 5;
+}
+.sp-unit { font-size: 10px; color: var(--muted); }
+.sp-toggle {
+	flex: 0 0 auto;
+	min-width: 38px;
+	height: 22px;
+	padding: 0 8px;
+	font-size: 11px;
+}
+.sp-toggle.is-on { background: var(--bg-selected); border-color: var(--accent); color: var(--ink); }
+.sp-select {
+	width: 100%;
+	height: 22px;
+	font-size: 11px;
+}
+
+/*
+ * 图形选择条（CAD 逻辑：先选图形，再在画布上画）。
+ *
+ * 浮在视口顶部居中——它只在绘制模式里出现，所以**不该占常驻布局**。
+ * 用 absolute 盖在画布上方，退出绘制模式就消失，画布一点没变。
+ */
+.shape-bar {
+	position: absolute;
+	top: 14px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px 6px 6px;
+	background: var(--bg-panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-lg);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, .14);
+	/* 永远不超过视口宽 —— 不然会横向溢出、右边被裁掉 */
+	max-width: calc(100% - 24px);
+}
+.shape-bar[hidden] { display: none; }
+/*
+ * 形状条：32 种图形，一行排不下。
+ *
+ * ## ⚠️ 这里推翻过一个决定，代价是一块"看不见的黑块"
+ *
+ * 原来的注释写着：
+ *
+ * > 用 `flex-wrap` 折行而不是横向滚动 —— 滚动条会把"还有别的形状"藏起来。
+ * > 折行后宽度靠 `.shape-bar` 的 `max-width` 约束，
+ * > **超过就往下长（它在视口顶部，往下长不挡画板）**。
+ *
+ * **最后那句是错的。** 往下长确实不挡画布*内容*，但这条是
+ * **深色背景 + `z-index: 30`** 的绝对定位元素 —— 往下长就是**盖在画板上**。
+ *
+ * 形状 15 个时折成两行、错误不显眼；**扩到 32 个之后折成 7–8 行、
+ * 整条撑到 293px**，在画布上就是一大块深色矩形。
+ * 症状是"画布上的东西点不中"（点击先落在这块上），
+ * 而它跟形状条**完全联想不到一起** —— 我为此查了好几轮。
+ *
+ * 现在改成**横向滚动**：形状再多也不会撑高。
+ * 代价是"要看全得滚一下"，但**看得见但点不中**比**要滚一下**严重得多。
+ *
+ * ## ⚠️ 改成 `nowrap` 时又漏了两个连带影响（第二次栽在这条上）
+ *
+ * 换行 → 不换行，不只是"排布方式变了"：
+ *
+ * 1. **子项开始被压缩。** `wrap` 时放不下会换行，子项保持原宽；
+ *    `nowrap` 时放不下就**压缩**（flex 子项默认 `flex-shrink: 1`）——
+ *    `.shape-pick` 的 54px 被压到 20 出头，**形状全挤成一团**。
+ * 2. **`max-height` 必须跟着内容走。** 按钮实际高约 45px
+ *    （图标 20 + 名字 13 + padding 10），我却锁了 34px ——
+ *    **名字被裁掉，只剩一排图标**，看着就是"挤在一起"。
+ *
+ * 所以下面三处是一套，**改一处就要回头检查另外两处**：
+ * `.shape-pick` 的 `flex: 0 0 auto`、`.shape-row` 的 `min-width: 0`、
+ * 以及这个 `max-height`。
+ */
+.shape-row {
+	display: flex;
+	/* 不换行 —— 换行会把它撑成一块盖住画布的面板（见上） */
+	flex-wrap: nowrap;
+	gap: 4px;
+	justify-content: flex-start;
+	/* 横向滚动，而不是长高 */
+	overflow-x: auto;
+	overflow-y: hidden;
+	/*
+	 * ★ `min-width: 0` 是必须的：flex 子项默认 `min-width: auto`，
+	 * 内容会把容器**撑宽**而不是收缩 —— 于是 `overflow-x: auto`
+	 * 永远不触发，形状条一路顶到 `max-width` 上限。
+	 * （和 `.cc-specs dd` 是同一个坑。）
+	 */
+	min-width: 0;
+	flex: 1 1 auto;
+	/* 高度要装得下「图标 + 名字」：20 + 2 + 13 + 上下 padding 10 ≈ 45px。
+	   锁 34px 的话名字会被裁掉，只剩一排图标。 */
+	max-height: 52px;
+	/* 留出空间给滚动条，免得最后一格被压住 */
+	padding-bottom: 2px;
+}
+.shape-pick {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	width: 54px;
+	/*
+	 * ★ **不许被压缩** —— 这是"形状全挤在一起"的直接原因。
+	 *
+	 * `flex-wrap: wrap` 时放不下会**换行**，子项保持 54px；
+	 * 改成 `nowrap` 之后放不下就**压缩**（flex 子项默认 flex-shrink: 1），
+	 * 32 个形状把每个挤到 20 出头 —— 图标糊成一片。
+	 *
+	 * 配套的两处：`.shape-row` 的 `min-width: 0`（让滚动真的生效）
+	 * 和它的 `max-height`（装得下名字）。
+	 */
+	flex: 0 0 auto;
+	/* 多行内容：必须解除按钮的固定高度，否则内容溢出叠在一起（踩过一次） */
+	height: auto;
+	padding: 5px 2px;
+	background: transparent;
+	border-color: transparent;
+	border-radius: var(--radius-md);
+}
+.shape-pick:hover { background: var(--bg-raised); }
+.shape-pick[aria-pressed="true"] {
+	background: var(--bg-selected);
+	border-color: var(--accent);
+	color: var(--ink);
+}
+.shape-art { font-size: 20px; line-height: 1; }
+.shape-name { font-size: 10px; color: var(--muted); }
+.shape-hint { font-size: 11px; color: var(--muted); padding-right: 4px; }
+
+/*
+ * 空状态：借 OpenDesign 首页的「大标题 + 高亮色块」。
+ *
+ * ## 为什么空状态值得用大字号
+ *
+ * 空状态是用户唯一会**完整读完**的一屏——他这会儿没别的事可做。
+ * 用小字写"画布还是空的"就等于浪费了这唯一一次解释清楚的机会。
+ *
+ * 高亮块（`.hl`）是它那套语言里最有辨识度的一笔：**成本几乎为零**
+ * （一个背景色 + 几个 padding），但整屏立刻从"报错提示"变成"邀请"。
+ */
+.empty {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	text-align: center;
+	pointer-events: none;
+	color: var(--muted);
+}
+/*
+ * 必须显式写这一条：`.empty { display: flex }` 的优先级高于浏览器默认的
+ * `[hidden] { display: none }`，所以只设 hidden 属性是**没有效果**的
+ * ——空状态文案会一直压在画板上（真踩过，截图才发现）。
+ */
+.empty[hidden] { display: none; }
+.empty-title {
+	margin: 0 0 6px;
+	font-size: 40px;
+	font-weight: 600;
+	letter-spacing: -.02em;
+	line-height: 1.25;
+	color: var(--ink);
+}
+/* 高亮块：衬在字下面，不是描边也不是变色 */
+.empty-title .hl {
+	background: var(--hl);
+	padding: 0 6px;
+	border-radius: 3px;
+}
+.empty-sub { margin: 0 0 26px; font-size: 15px; color: var(--ink-dim); }
+.empty-hint { margin: 0; font-size: 12px; line-height: 1.8; color: var(--ink-dim); }
+.empty-hint.dim { color: var(--muted); margin-top: 8px; }
+.empty code {
+	background: var(--bg-raised);
+	padding: 1px 5px;
+	border-radius: var(--radius-sm);
+	font-family: var(--font-mono);
+}
+
+/* ---- 画板 ---- */
+.board {
+	position: absolute;
+	/* left/top 由 JS 按 rect 设置（世界坐标）。 */
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.board-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--muted);
+	cursor: move;
+	user-select: none;
+	white-space: nowrap;
+	/* 缩放很小时文字会糊，但不隐藏——标题是定位画板的主要线索。 */
+}
+.board-name { color: var(--ink); font-weight: 600; }
+.board-meta { font-family: var(--font-mono); font-size: 11px; }
+.board-spec {
+	max-width: 260px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--warn);
+}
+
+.board-frame {
+	position: relative;
+	/* 加载中的占位底色：不能用纯白——暗色主题下会闪一块刺眼的白。 */
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	overflow: hidden;
+	/* 画板本身不吃指针事件之外的滚动；iframe 需要能滚动，所以这里不设 pointer-events。 */
+}
+.board-frame iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	/* 画板里的页面自带底色；这里给一个中性兜底，免得主题切换时闪白。 */
+	background: var(--bg-raised);
+}
+
+.board.selected .board-frame {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.board.selected .board-name { color: var(--accent); }
+
+/* 设备外观：手机/平板加一圈边框，便于一眼区分。 */
+.board[data-device="phone"] .board-frame,
+.board[data-device="phone-large"] .board-frame { border-width: 6px; border-radius: 18px; border-color: var(--bg-raised); }
+.board[data-device="tablet"] .board-frame { border-width: 8px; border-radius: 14px; border-color: var(--bg-raised); }
+
+/* 缩放很小时隐藏标题，只留画面（否则文字会糊成噪点）。 */
+.world[data-tiny="1"] .board-head { display: none; }
+
+.board-resize {
+	position: absolute;
+	right: -5px;
+	bottom: -5px;
+	width: 11px;
+	height: 11px;
+	border-radius: 3px;
+	background: var(--accent);
+	border: 1.5px solid var(--bezel);
+	cursor: nwse-resize;
+	opacity: 0;
+	transition: opacity .12s;
+}
+.board:hover .board-resize,
+.board.selected .board-resize { opacity: 1; }
+
+.board-tools {
+	position: absolute;
+	right: 0;
+	top: -22px;
+	display: none;
+	gap: 4px;
+}
+.board.selected .board-tools { display: flex; }
+.board-tools button {
+	padding: 1px 6px;
+	font-size: 11px;
+	background: var(--bg-raised);
+}
+
+/* ---- 指令条（画布 → Agent）---- */
+/*
+ * 指令栏：借 OpenDesign 的 composer 形态。
+ *
+ * ## 为什么值得改成卡片
+ *
+ * 原来是「一行三件」：目标标签 + 输入框 + 矩形按钮，每条边都顶着窗口边——
+ * 视觉上是"页脚的一条工具栏"，不像"我要在这里创作"。
+ *
+ * 改成**一张浮起来的圆角卡片**：输入在上、控件在下、右侧一个圆形发送按钮。
+ * 同样的元素，但视线会先落在输入框上，而不是散在三个地方。
+ *
+ * ## 保持的不变
+ *
+ * `#promptTarget` / `#promptText` / `#promptSend` 三个 id 一个没动，
+ * 所以 shell.js 不用改——**改结构时保住 id，是让重构不波及逻辑的关键**。
+ */
+.prompt {
+	flex: 0 0 auto;
+	padding: 10px 14px 12px;
+	background: var(--bg-app);
+	border-top: 1px solid var(--line);
+}
+.composer {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px 8px;
+	background: var(--bg-panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-lg);
+	transition: border-color .15s;
+}
+.composer:focus-within { border-color: var(--accent); }
+.composer input {
+	width: 100%;
+	background: transparent;
+	border: 0;
+	padding: 2px 0;
+	color: var(--ink);
+	font: inherit;
+	font-size: 14px;
+}
+.composer input:focus { outline: none; }
+.composer input:disabled { opacity: .5; }
+.composer input::placeholder { color: var(--muted); }
+
+/* 底部控件行：上下文靠左、发送靠右 */
+.composer-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 30px;
+}
+.ctx-chip {
+	flex: 0 0 auto;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--muted);
+	background: var(--bg-sunken);
+	border: 1px solid var(--line);
+	border-radius: 999px;      /* 药丸——和侧栏页签同一套语言 */
+	padding: 3px 9px;
+}
+/* 不可用时用告警色，让人一眼看出「这条发不出去」。 */
+.ctx-chip.bad { color: var(--warn); border-color: var(--warn-line); }
+.composer-hint {
+	flex: 1 1 auto;
+	font-size: 11px;
+	color: var(--muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/*
+ * 圆形发送按钮。
+ * 借 OpenDesign 的做法：**深色实心圆 + 箭头**，不用文字。
+ * 圆是"这里只有一件事可做"的信号，比一个写着字的矩形更快认出来。
+ */
+.send {
+	flex: 0 0 auto;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 50%;
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--ink-on-accent);
+}
+.send .glyph { font-size: 15px; }
+.send:hover:not(:disabled) { background: var(--accent); filter: brightness(.96); }
+.send:disabled { background: var(--btn-disabled-bg); color: var(--btn-disabled-ink); border-color: transparent; }
+
+/* ---- 状态栏 ---- */
+.status {
+	flex: 0 0 auto;
+	padding: 5px 12px;
+	background: var(--bg-panel);
+	border-top: 1px solid var(--line);
+	color: var(--muted);
+	font-size: 12px;
+	font-family: var(--font-mono);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	box-shadow: var(--shadow-panel);
+}
+.status.ok { color: var(--ok); }
+.status.err { color: var(--err); }
+.status.warn { color: var(--warn); }
+
+/* ---- 添加画板对话框 ---- */
+dialog {
+	background: var(--bg-panel);
+	color: var(--ink);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-lg);
+	padding: 0;
+	width: 420px;
+	box-shadow: 0 20px 48px var(--scrim);
+}
+dialog::backdrop { background: var(--scrim); }
+dialog form { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+dialog h2 { margin: 0 0 4px; font-size: 15px; }
+dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+dialog input, dialog select, dialog textarea {
+	background: var(--bg-sunken);
+	color: var(--ink);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	padding: 6px 8px;
+	font: inherit;
+	font-size: 13px;
+	resize: vertical;
+}
+dialog input:focus, dialog select:focus, dialog textarea:focus { outline: none; border-color: var(--accent); }
+dialog small { color: var(--muted); font-size: 11px; }
+dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0 0; padding: 0; }
+
+/* ---- 元素检查器 ---- */
+/*
+  浮在视口左上角，不占侧栏。
+  只用已有的令牌（--line-soft / --muted / --ink），所以亮暗主题自动跟着变，
+  不需要写两套颜色——这是「加新面板」最容易踩的坑。
+*/
+.inspector {
+	position: absolute;
+	left: 10px;
+	top: 10px;
+	z-index: 30;
+	width: 208px;
+	max-height: calc(100% - 20px);
+	overflow: auto;
+	padding: 6px 0 4px;
+	background: var(--panel, #fff);
+	border: 1px solid var(--line-soft);
+	border-radius: 8px;
+	box-shadow: 0 6px 20px rgb(0 0 0 / 12%);
+	font-size: 11px;
+	color: var(--ink-dim);
+}
+.inspector:empty { display: none; }
+.insp-empty {
+	padding: 10px;
+	line-height: 1.7;
+	color: var(--muted);
+	font-size: 11px;
+}
+.insp-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 10px 6px;
+	border-bottom: 1px solid var(--line-soft);
+}
+.insp-tag {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11px;
+	color: var(--ink);
+	word-break: break-all;
+}
+/*
+  删除按钮：**常驻可见**，不做成 hover 才出现。
+  理由：用户报过「没有删除功能」——一个要悬停才露出来的图标
+  解决不了"不知道能删"这个问题。
+
+  ⚠️ 尺寸**不要在这里写**：`.insp-del` 会和全局 `button { height: 32px }`
+  （shell.css:304）打架。实测踩过——按钮被撑成 32px，比旁边的文字大一圈，
+  标题行被顶高，看着很笨重。
+  正确做法是复用规范里已有的小档位 `button.sm`（24px），标记里写成 `class="insp-del sm"`。
+  这里只管颜色，尺寸交给 sm。
+*/
+.insp-del {
+	flex: 0 0 auto;
+	color: var(--danger, #d93025);
+}
+.insp-del:hover {
+	color: #fff;
+	background: var(--danger, #d93025);
+	border-color: var(--danger, #d93025);
+}
+.insp-list { padding: 4px 0; }
+.insp-row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 2px 10px;
+	min-height: 18px;
+}
+.insp-label {
+	flex: 0 0 34px;
+	font-size: 10px;
+	color: var(--muted);
+	white-space: nowrap;
+}
+.insp-value {
+	flex: 1 1 auto;
+	min-width: 0;
+	color: var(--ink-dim);
+	font-size: 11px;
+	/* 颜色值有可能是 rgb(0, 0, 0, 0) 这样一长串，截断比换行好看 */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.insp-muted { color: var(--muted); font-size: 11px; padding: 4px 10px; }

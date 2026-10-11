@@ -1,0 +1,14 @@
+# 统一换行符：仓库里一律 LF。
+#
+# 不写这个的话，Windows 上 `git add` 会把这些文件转成 CRLF 存进仓库
+# （实测有 56 条 "LF will be replaced by CRLF" 警告），
+# 克隆到 Linux/macOS 上虽然也能跑，但 diff 会整体错位、看着像全文件重写。
+* text=auto eol=lf
+
+# 这几个是二进制/不该被转换的
+*.png binary
+*.jpg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.zip binary

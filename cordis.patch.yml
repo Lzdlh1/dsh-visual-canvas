@@ -1,0 +1,34 @@
+# Bundle patch for dsh-visual-canvas: insert this plugin's row into the profile roster.
+#
+# Applied as a profile bundle layer (declared by the package.json field
+# `dsh.bundle.patch`). Install with:
+#   dsh plugin --profile <profile> add link:<absolute path to this directory>
+#
+# `name` 必须是**包名**（由 profile 的 node_modules 解析），不是行 id。
+# `id` 只是这一行的标识，用于后续 id 定向覆盖。
+#
+# Kept ASCII-only in the code parts on purpose: the loader parses the file as
+# UTF-8, and ASCII comments remove any doubt about encoding across editors.
+- insert:
+    - id: visual-canvas
+      name: dsh-visual-canvas
+      config:
+        # 你的前端 dev server 地址。插件会把它的页面代理到 <prefix> 之下。
+        target: "http://127.0.0.1:5173"
+        # 源码根目录（必填）。留空则插件不激活——猜错会去改不相干的仓库。
+        projectRoot: ""
+        # 访问前缀。两个入口都用它：
+        #   http://127.0.0.1:19387/canvas/   （DSH 端口，普通浏览器可用）
+        #   http://127.0.0.1:19390/canvas/   （独立端口，侧边栏/嵌入浏览器用这个）
+        prefix: "/canvas"
+        # 独立端口：**侧边栏/嵌入浏览器唯一能打开的入口**。
+        # 原因：DSH 的嵌入浏览器拒绝打开与 DSH 自身同源的地址，而同源判定包含端口；
+        # 画布挂在 DSH 端口下时侧边栏必然白屏，所以必须另起一个端口换 origin。
+        # 0 = 让系统分配（实际地址会写进日志与 /__canvas__/status 接口）。
+        standalonePort: 19390
+        # true = 改动直接落盘；false = 先入待确认队列，由你或 Agent 确认。
+        autoApply: true
+        # 每次落盘建一个 [canvas] 前缀的 git 提交，便于人工审计（不影响你的其它未提交改动）。
+        gitCheckpoints: true
+        # 快照目录（撤销用）。留空 = $DSH_HOME/visual-canvas/snapshots
+        snapshotRoot: ""

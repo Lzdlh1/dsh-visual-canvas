@@ -1,0 +1,16 @@
+{
+  "name": "dsh-canvas-demo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "dsh-visual-canvas 的零依赖演示站点：用 Node 内置 http 起一个像真实前端项目的页面，用来验证代理注入、元素定位与源码写回。",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs 5173"
+  },
+  "keywords": [
+    "dsh",
+    "visual-canvas",
+    "demo"
+  ],
+  "license": "MIT"
+}

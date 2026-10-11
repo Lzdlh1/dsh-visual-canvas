@@ -1,0 +1,14 @@
+# 运行时产物（插件本体零依赖，这几条是防手滑）
+node_modules/
+*.log
+
+# 落盘前的备份 / 损坏文件
+*.bak
+*.damaged-*
+
+# 快照目录（撤销用）。默认在 $DSH_HOME/visual-canvas/snapshots，
+# 但配置成 snapshotRoot 时可能落在项目里。
+.dsh-canvas/snapshots/
+
+# ⚠️ **不要**忽略 `lib/canvas/ui/.dsh-canvas/`
+#    那是画板的默认布局，克隆者靠它开箱就能看到一块画板。
