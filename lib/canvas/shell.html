@@ -14,7 +14,7 @@
 		  侧栏收起后自身就看不见了，把开关放里面等于"收起来就再也打不开"。
 		  箭头方向跟着状态变（◀ 收起 / ▶ 展开）。
 		-->
-		<button type="button" id="btnSide" class="icon" data-tip="收起侧边栏" aria-label="侧边栏" aria-pressed="false"><span class="glyph">◀</span></button>
+		<button type="button" id="btnSide" class="icon" data-tip="收起侧边栏" aria-label="侧边栏" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
 		<span class="brand">画布</span>
 		<span class="file" id="fileLabel" title="布局文件（进版本库，团队共享）"></span>
 		<div class="spacer"></div>
@@ -24,10 +24,21 @@
 		  文字仍在：① 放进 data-tip 悬停显示 ② aria-label 供读屏。
 		  这样工具栏安静下来，但可发现性没有丢——**丢可发现性的图标按钮是坏设计**。
 		-->
-		<button type="button" id="btnUndo" class="icon" data-tip="撤销（Ctrl+Z）" aria-label="撤销"><span class="glyph">↶</span></button>
-		<button type="button" id="btnRedo" class="icon" data-tip="重做（Ctrl+Shift+Z）" aria-label="重做"><span class="glyph">↷</span></button>
-		<button type="button" id="btnPick" class="icon" data-tip="选择元素：开启后点画板里的元素即可改样式（也可按住 Alt 点）" aria-label="选择元素"><span class="glyph">◫</span></button>
-		<button type="button" id="btnShape" class="icon" data-tip="创建组件：选一个图形，在画板上按住拖出来" aria-label="创建组件"><span class="glyph">▢</span></button>
+		<button type="button" id="btnUndo" class="icon" data-tip="撤销（Ctrl+Z）" aria-label="撤销"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg></button>
+		<button type="button" id="btnRedo" class="icon" data-tip="重做（Ctrl+Shift+Z）" aria-label="重做"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg></button>
+		<!--
+		  ★ 「选择元素」用**手掌抓取** SVG，不用字符 `◫`。
+
+		  用户两次指着工具栏这两个按钮说"没变化"，而我一直改的是别处
+		  （第一次改的是画板原型 `prototype.html` 里同名的 `data-act`，
+		  第二次改的是"选中框/手柄"和"注释卡片"——那两个只在操作时才出现）。
+
+		  现在把画板原型里那两个图标**原样搬过来**：`◫` / `💬` 这种字符的
+		  字形由系统字体决定，尺寸和基线不跟随 CSS，16px 下看着忽大忽小；
+		  SVG 走 `stroke="currentColor"`，主题色一变它跟着变。
+		-->
+		<button type="button" id="btnPick" class="icon" data-tip="选择元素：开启后点画板里的元素即可改样式（也可按住 Alt 点）" aria-label="选择元素"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12 6.8 5"/><path d="M11.5 12V3.2"/><path d="M15 12 16.2 5"/><path d="M18.4 12 19.6 7.6"/><path d="M8 14 3.8 10.4"/><path d="M8 12v3.4a5 5 0 0 0 5 5h1a5 5 0 0 0 5-5V12"/></svg></button>
+		<button type="button" id="btnShape" class="icon" data-tip="创建组件：选一个图形，在画板上按住拖出来" aria-label="创建组件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></button>
 		<!--
 		  注释：选中一个组件 → 写评论 / 传图 → 发给 Agent。
 
@@ -39,9 +50,9 @@
 		  带 `data-tip` 和 `aria-label` 是工具栏的既有约定：
 		  图标可以安静，但**不能丢掉可发现性**。
 		-->
-		<button type="button" id="btnComment" class="icon" data-tip="注释：选中一个组件，写评论或传图发给 Agent" aria-label="注释"><span class="glyph">💬</span></button>
-		<button type="button" id="btnFit" class="icon" data-tip="适应：把所有画板缩放到可见范围（快捷键 0）" aria-label="适应"><span class="glyph">⛶</span></button>
-		<button type="button" id="btnReload" class="icon" data-tip="重载：从磁盘重新读取布局" aria-label="重载"><span class="glyph">↻</span></button>
+		<button type="button" id="btnComment" class="icon" data-tip="注释：选中一个组件，写评论或传图发给 Agent" aria-label="注释"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/></svg></button>
+		<button type="button" id="btnFit" class="icon" data-tip="适应：把所有画板缩放到可见范围（快捷键 0）" aria-label="适应"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+		<button type="button" id="btnReload" class="icon" data-tip="重载：从磁盘重新读取布局" aria-label="重载"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
 		<span class="theme-group" id="themeGroup" data-tip="主题（存本机，不进项目文件）">
 			<button type="button" data-theme="light">亮</button>
 			<button type="button" data-theme="dark">暗</button>
@@ -152,7 +163,7 @@
 				<span class="ctx-chip" id="promptTarget" title="这条指令会发给哪个会话">检查中…</span>
 				<span class="composer-hint">在画布上选中元素后，指令会带上它的位置</span>
 				<button type="button" id="promptSend" class="send" disabled data-tip="发送给 Agent" aria-label="发送给 Agent">
-					<span class="glyph">↑</span>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
 				</button>
 			</div>
 		</div>
@@ -198,9 +209,9 @@
 	<div class="cc-actions">
 		<label class="cc-attach" data-tip="附加图片（可以多张）">
 			<input type="file" id="ccFiles" accept="image/*" multiple hidden>
-			<span class="glyph">📎</span>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
 		</label>
-		<button type="button" class="cc-icon" id="ccClose" data-tip="关闭（Esc）" aria-label="关闭"><span class="glyph">✕</span></button>
+		<button type="button" class="cc-icon" id="ccClose" data-tip="关闭（Esc）" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
 		<span class="cc-target" id="ccTarget">检查中…</span>
 		<button type="button" class="cc-send" id="ccSend" disabled>发送给 Agent</button>
 	</div>

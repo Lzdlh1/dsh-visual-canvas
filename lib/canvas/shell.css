@@ -385,6 +385,33 @@ button.icon {
 	color: var(--ink);
 }
 button.icon .glyph { font-size: 15px; line-height: 1; }
+/*
+ * ★ 图标按钮里的 SVG 尺寸（`#btnPick` 手掌 / `#btnComment` 气泡）
+ *
+ * 这两个原来是字符（`◫` / `💬`），字形由系统字体决定 —— 尺寸和基线不跟随 CSS，
+ * 16px 下看着忽大忽小，emoji 还带自己的颜色（主题切换时它不变）。
+ * 换成 SVG 后走 `stroke="currentColor"`，颜色跟主题走。
+ *
+ * 尺寸对齐画板原型里的 `.icon-btn svg { width: 16px; height: 16px }`。
+ * ⚠️ 必须给 `display: block`：inline 的 svg 会在基线上留一截空隙，
+ * 图标看着比相邻的字符按钮偏高。
+ */
+button.icon > svg { width: 16px; height: 16px; display: block; }
+/*
+ * #btnSide 的图标靠**旋转**表达方向（收起 ↔ 展开），加个过渡让它不突兀。
+ * 原来这里是 `textContent = collapsed ? "▶" : "◀"` —— 字符换不了颜色，
+ * 而且和旁边那排 SVG 的尺寸基线对不齐。
+ */
+#btnSide > svg { transition: transform .18s ease; }
+
+/* 指令栏的发送键（原来是字符 ↑） */
+.send > svg { width: 16px; height: 16px; display: block; }
+
+/* 注释卡片上的附件 / 关闭（原来是字符 📎 / ✕） */
+.cc-attach > svg { width: 15px; height: 15px; display: block; }
+.cc-icon > svg { width: 14px; height: 14px; display: block; }
+/* 缩略图角上的移除按钮（JS 动态创建） */
+.cc-thumb-del > svg { width: 10px; height: 10px; display: block; }
 
 /* ---- 悬停提示 ---- */
 /*
@@ -1433,14 +1460,23 @@ body.link-picking .viewport { cursor: crosshair; }
 	width: 360px;
 	padding: 10px 12px 12px;
 	border: 1px solid var(--line);
-	border-radius: 12px;
+	/*
+	 * ★ 圆角和阴影对齐画板原型（用户要求：按画板的 UI 统一「注释」这一处）
+	 *
+	 * 原型里是 `border-radius: var(--radius-lg)`（= 8px）+
+	 * `box-shadow: 0 12px 36px rgba(0, 0, 0, .5)`；
+	 * 外壳这边写死的是 `12px` + `.28` —— 卡片比原型更圆，
+	 * 而**阴影明显更弱**，浮在画板上时边界不够清楚，
+	 * 看着是"贴"在内容上，而不是浮在它上面。
+	 */
+	border-radius: var(--radius-lg);
 	/* ⚠️ 这里原来引用的是 `--surface` —— **那个变量从来没定义过**。
 	   CSS 变量未定义且没有 fallback 时，整条声明**静默失效**：
 	   卡片背景直接变透明，用户看到的是下面的画板内容透出来。
 	   → 用户原话："背景透明的，不太容易看清"。
 	   正确的 token 是 `--bg-panel`（面板色）。 */
 	background: var(--bg-panel);
-	box-shadow: 0 12px 36px rgba(0, 0, 0, .28);
+	box-shadow: 0 12px 36px rgba(0, 0, 0, .5);
 	font-size: 12px;
 	color: var(--ink);
 }
