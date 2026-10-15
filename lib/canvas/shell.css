@@ -1934,6 +1934,7 @@ body.link-picking .viewport { cursor: crosshair; }
 	top: -22px;
 	display: none;
 	gap: 4px;
+	align-items: center;
 }
 .board.selected .board-tools { display: flex; }
 .board-tools button {
@@ -1941,6 +1942,24 @@ body.link-picking .viewport { cursor: crosshair; }
 	font-size: 11px;
 	background: var(--bg-raised);
 }
+/*
+ * 设备切换下拉（`.board-tools` 里的第一个控件）。
+ *
+ * 样式对齐旁边的「删除」按钮 —— 同一个工具栏里的东西不该看着像两套。
+ * 高度写 18px 而不是靠 padding 撑：`<select>` 在不同浏览器里的默认内边距
+ * 差得多，不锁高度它会比旁边的按钮高一截，工具栏会跳。
+ */
+.board-device {
+	height: 18px;
+	padding: 0 4px;
+	font: 11px var(--font-sans);
+	color: var(--ink);
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+}
+.board-device:hover { border-color: var(--accent); }
 
 /* ---- 指令条（画布 → Agent）---- */
 /*
